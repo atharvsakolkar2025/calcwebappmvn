@@ -3,7 +3,9 @@ pipeline {
         label 'linux'
     }
     environment {
-        IMAGE_NAME = "calcwebappmvn:${BUILD_NUMBER}"
+        cluster_name = "my-cluster-1"
+        Region = "us-west-2"
+        IMAGE_NAME = "calcwebappmvn:v1"
         my_aws_access = credentials('my-aws-cred')
     }
     tools {
@@ -76,7 +78,7 @@ pipeline {
                 sh 'aws ecr get-login-password --region us-west-2 | docker login --username AWS --password-stdin 964742912902.dkr.ecr.us-west-2.amazonaws.com'
                 echo "Logged in to AWS ECR Successfully!!"
 
-                sh 'docker tag ${IMAGE_NAME} 964742912902.dkr.ecr.us-west-2.amazonaws.com/dev/calculator:${BUILD_NUMBER}'
+                sh 'docker tag ${IMAGE_NAME} 964742912902.dkr.ecr.us-west-2.amazonaws.com/dev/calculator:v1'
                 echo "Docker Image Tagged Successfully!!"
                 sh 'docker images'
             }
@@ -84,7 +86,7 @@ pipeline {
 
         stage('Push to ECR') {
             steps {
-                sh 'docker push 964742912902.dkr.ecr.us-west-2.amazonaws.com/dev/calculator:${BUILD_NUMBER}'
+                sh 'docker push 964742912902.dkr.ecr.us-west-2.amazonaws.com/dev/calculator:v1'
                 echo "Docker Image Pushed to ECR Successfully!!"
             }
         }
@@ -92,8 +94,14 @@ pipeline {
 
         stage('kubeconfig setup') {
             steps {
-                sh 'aws eks update-kubeconfig --region us-west-2 --name my-cluster'
-                echo "Kubeconfig setup completed successfully!!"
+                sh 'aws eks update-kubeconfig --region ${Region} --name ${cluster_name}'
+                // sh '''kubectl create secret docker-registry my-ecr-secret-cbz \
+                //       --docker-server=964742912902.dkr.ecr.${Region}.amazonaws.com \
+                //       --docker-username=AWS \
+                //       --docker-password=$(aws ecr get-login-password --region ${Region})'''
+
+                
+                echo "Kubeconfig setup and secret creation completed successfully!!"
             }
         }
 
@@ -101,12 +109,28 @@ pipeline {
             steps {
 
                 sh 'kubectl get all'
+                sh 'kubectl get secrets'
                 echo "Verified access to EKS cluster successfully!!"
 
                 //sh 'kubectl apply -f k8s-deployment.yaml'
                 //echo "Application Deployed to EKS Successfully!!"
             }
         }
+
+        stage('deploy to eks') {
+            steps {
+
+                sh 'kubectl apply -f calc-deployment-svc.yaml'
+                sh 'kubectl get all'
+                sh 'sleep 20'
+                sh 'kubectl get svc -o wide'
+                echo ".war application deployed to EKS cluster successfully!!"
+
+                //sh 'kubectl apply -f k8s-deployment.yaml'
+                //echo "Application Deployed to EKS Successfully!!"
+            }
+        }
+
 
 
 
